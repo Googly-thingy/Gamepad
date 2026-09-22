@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Game Controller</string>
+    <string name="controller_title">Virtual Gamepad</string>
+    <string name="receiver_title">TV Input Receiver</string>
+    <string name="channel_name">TV Receiver Background Service</string>
+    <string name="channel_desc">Maintains active WebSocket and Bluetooth server to receive game controller inputs in background</string>
+    <string name="ime_name">Virtual Gamepad Input</string>
+</resources>
