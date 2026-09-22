@@ -346,30 +346,37 @@ fun ConnectionDialog(
                 if (selectedProtocol == ProtocolType.BLUETOOTH || selectedProtocol == ProtocolType.BLUETOOTH_HID) {
                     // Explanatory banner for Bluetooth HID mode
                     if (selectedProtocol == ProtocolType.BLUETOOTH_HID) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(XboxGreen.copy(alpha = 0.15f))
-                                .border(1.dp, XboxGreen.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .background(XboxGreen.copy(alpha = 0.12f))
+                                .border(1.dp, XboxGreen.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            Icon(Icons.Default.Gamepad, contentDescription = "Native HID", tint = XboxGreen, modifier = Modifier.size(16.dp))
-                            Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.Gamepad, contentDescription = "Native HID", tint = XboxGreen, modifier = Modifier.size(16.dp))
                                 Text(
                                     text = "Native Hardware Gamepad Profile",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = XboxGreen
                                 )
-                                Text(
-                                    text = "Emulates an official gamepad. Detected automatically in Beach Buggy Racing & PPSSPP!",
-                                    fontSize = 9.sp,
-                                    color = TextPrimary
-                                )
                             }
+                            Text(
+                                text = "Emulates an official gamepad. Detected automatically by Beach Buggy Racing & PPSSPP with full analog steering!",
+                                fontSize = 9.sp,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "💡 Pairing Tip: If TV disconnects after a second, go to TV Settings > Remotes & Accessories > Forget/Unpair this phone. Then select 'Add Accessory' on your TV to pair fresh as a Gamepad.",
+                                fontSize = 9.sp,
+                                color = AmberWarning
+                            )
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                     }

@@ -95,8 +95,6 @@ class BluetoothHidControllerClient(
             val adapter = BluetoothAdapter.getDefaultAdapter()
             val device = try { adapter?.getRemoteDevice(target) } catch (_: Throwable) { null }
             if (device != null) {
-                // Wait briefly for HID registration
-                delay(800)
                 manager.connectToDevice(device)
             }
         }

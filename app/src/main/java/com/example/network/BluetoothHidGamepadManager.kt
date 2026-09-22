@@ -33,6 +33,8 @@ class BluetoothHidGamepadManager(private val context: Context) {
 
     private var hidDevice: BluetoothHidDevice? = null
     private var connectedDevice: BluetoothDevice? = null
+    private var isRegistered = false
+    private var pendingDeviceToConnect: BluetoothDevice? = null
     private val executor = Executors.newSingleThreadExecutor()
 
     private val serviceListener = object : BluetoothProfile.ServiceListener {
@@ -48,15 +50,28 @@ class BluetoothHidGamepadManager(private val context: Context) {
             if (profile == BluetoothProfile.HID_DEVICE) {
                 hidDevice = null
                 connectedDevice = null
+                isRegistered = false
                 _hidState.value = HidConnectionState.Disconnected("HID Service disconnected")
             }
         }
     }
 
     private val hidCallback = object : BluetoothHidDevice.Callback() {
+        @SuppressLint("MissingPermission")
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
+            isRegistered = registered
             if (registered) {
-                _hidState.value = HidConnectionState.Registered("Ready to pair with TV in TV Bluetooth Settings")
+                _hidState.value = HidConnectionState.Registered("HID Gamepad Ready")
+                val pending = pendingDeviceToConnect
+                if (pending != null) {
+                    pendingDeviceToConnect = null
+                    try {
+                        Log.d("BluetoothHidGamepad", "Connecting to queued device ${pending.address}")
+                        hidDevice?.connect(pending)
+                    } catch (t: Throwable) {
+                        Log.e("BluetoothHidGamepad", "Error connecting to queued device", t)
+                    }
+                }
             } else {
                 _hidState.value = HidConnectionState.Disconnected("HID Application unregistered")
             }
@@ -70,6 +85,15 @@ class BluetoothHidGamepadManager(private val context: Context) {
                     val name = try { device?.name ?: "Android TV" } catch (_: Throwable) { "Android TV" }
                     val addr = try { device?.address ?: "" } catch (_: Throwable) { "" }
                     _hidState.value = HidConnectionState.Connected(name, addr)
+
+                    // Immediately transmit initial neutral report so TV host handshake completes smoothly
+                    executor.execute {
+                        try {
+                            Thread.sleep(80)
+                            val report = buildHidReport(lastGamepadState)
+                            hidDevice?.sendReport(device, REPORT_ID.toInt(), report)
+                        } catch (_: Throwable) {}
+                    }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     if (connectedDevice == device) {
@@ -84,15 +108,31 @@ class BluetoothHidGamepadManager(private val context: Context) {
         }
 
         override fun onGetReport(device: BluetoothDevice?, type: Byte, id: Byte, bufferSize: Int) {
-            if (type == BluetoothHidDevice.REPORT_TYPE_INPUT && id == REPORT_ID) {
-                val lastState = lastGamepadState
-                val report = buildHidReport(lastState)
-                hidDevice?.replyReport(device, type, id, report)
+            if (type == BluetoothHidDevice.REPORT_TYPE_INPUT && (id == REPORT_ID || id == 0.toByte())) {
+                val report = buildHidReport(lastGamepadState)
+                hidDevice?.replyReport(device, type, REPORT_ID, report)
+            } else {
+                hidDevice?.reportError(device, BluetoothHidDevice.ERROR_RSP_INVALID_RPT_ID)
             }
         }
 
         override fun onSetReport(device: BluetoothDevice?, type: Byte, id: Byte, data: ByteArray?) {
             hidDevice?.reportError(device, BluetoothHidDevice.ERROR_RSP_SUCCESS)
+        }
+
+        override fun onSetProtocol(device: BluetoothDevice?, protocol: Byte) {
+            val dev = device ?: connectedDevice
+            if (dev != null) {
+                val report = buildHidReport(lastGamepadState)
+                hidDevice?.sendReport(dev, REPORT_ID.toInt(), report)
+            }
+        }
+
+        override fun onVirtualCableUnplug(device: BluetoothDevice?) {
+            if (connectedDevice == device) {
+                connectedDevice = null
+                _hidState.value = HidConnectionState.Disconnected("Unplugged by TV")
+            }
         }
     }
 
@@ -129,9 +169,9 @@ class BluetoothHidGamepadManager(private val context: Context) {
         val hid = hidDevice ?: return
         try {
             val sdp = BluetoothHidDeviceAppSdpSettings(
-                "Virtual Gamepad",
-                "Android TV Bluetooth Gamepad Controller",
-                "Google AI Studio",
+                "Wireless Gamepad",
+                "Bluetooth Gamepad Controller",
+                "Google",
                 BluetoothHidDevice.SUBCLASS2_GAMEPAD,
                 HID_GAMEPAD_DESCRIPTOR
             )
@@ -145,8 +185,14 @@ class BluetoothHidGamepadManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun connectToDevice(device: BluetoothDevice) {
-        val hid = hidDevice ?: return
+        val hid = hidDevice
+        if (hid == null || !isRegistered) {
+            Log.d("BluetoothHidGamepad", "HID not registered yet, queueing connection to ${device.address}")
+            pendingDeviceToConnect = device
+            return
+        }
         try {
+            Log.d("BluetoothHidGamepad", "Connecting to ${device.address}")
             hid.connect(device)
         } catch (t: Throwable) {
             Log.e("BluetoothHidGamepad", "Error connecting to device", t)
@@ -248,17 +294,18 @@ class BluetoothHidGamepadManager(private val context: Context) {
         }
         report[2] = hat.toByte()
 
-        // Byte 3: Left Stick X (-127 to +127)
-        report[3] = (state.leftStickX.coerceIn(-1f, 1f) * 127f).toInt().toByte()
+        // Unsigned 0..255 axes with 128 as neutral center
+        // Byte 3: Left Stick X
+        report[3] = ((state.leftStickX.coerceIn(-1f, 1f) + 1f) * 127.5f).toInt().coerceIn(0, 255).toByte()
 
-        // Byte 4: Left Stick Y (-127 to +127)
-        report[4] = (state.leftStickY.coerceIn(-1f, 1f) * 127f).toInt().toByte()
+        // Byte 4: Left Stick Y
+        report[4] = ((state.leftStickY.coerceIn(-1f, 1f) + 1f) * 127.5f).toInt().coerceIn(0, 255).toByte()
 
-        // Byte 5: Right Stick X (-127 to +127)
-        report[5] = (state.rightStickX.coerceIn(-1f, 1f) * 127f).toInt().toByte()
+        // Byte 5: Right Stick X
+        report[5] = ((state.rightStickX.coerceIn(-1f, 1f) + 1f) * 127.5f).toInt().coerceIn(0, 255).toByte()
 
-        // Byte 6: Right Stick Y (-127 to +127)
-        report[6] = (state.rightStickY.coerceIn(-1f, 1f) * 127f).toInt().toByte()
+        // Byte 6: Right Stick Y
+        report[6] = ((state.rightStickY.coerceIn(-1f, 1f) + 1f) * 127.5f).toInt().coerceIn(0, 255).toByte()
 
         return report
     }
@@ -271,46 +318,42 @@ class BluetoothHidGamepadManager(private val context: Context) {
             0x09.toByte(), 0x05.toByte(), // USAGE (Gamepad)
             0xa1.toByte(), 0x01.toByte(), // COLLECTION (Application)
             0x85.toByte(), REPORT_ID,    //   REPORT_ID (1)
-            0xa1.toByte(), 0x00.toByte(), //   COLLECTION (Physical)
 
             // 16 Buttons (A, B, X, Y, L1, R1, L2, R2, Select, Start, L3, R3, Home, etc.)
-            0x05.toByte(), 0x09.toByte(), //     USAGE_PAGE (Button)
-            0x19.toByte(), 0x01.toByte(), //     USAGE_MINIMUM (Button 1)
-            0x29.toByte(), 0x10.toByte(), //     USAGE_MAXIMUM (Button 16)
-            0x15.toByte(), 0x00.toByte(), //     LOGICAL_MINIMUM (0)
-            0x25.toByte(), 0x01.toByte(), //     LOGICAL_MAXIMUM (1)
-            0x95.toByte(), 0x10.toByte(), //     REPORT_COUNT (16)
-            0x75.toByte(), 0x01.toByte(), //     REPORT_SIZE (1)
-            0x81.toByte(), 0x02.toByte(), //     INPUT (Data,Var,Abs)
+            0x05.toByte(), 0x09.toByte(), //   USAGE_PAGE (Button)
+            0x19.toByte(), 0x01.toByte(), //   USAGE_MINIMUM (Button 1)
+            0x29.toByte(), 0x10.toByte(), //   USAGE_MAXIMUM (Button 16)
+            0x15.toByte(), 0x00.toByte(), //   LOGICAL_MINIMUM (0)
+            0x25.toByte(), 0x01.toByte(), //   LOGICAL_MAXIMUM (1)
+            0x75.toByte(), 0x01.toByte(), //   REPORT_SIZE (1)
+            0x95.toByte(), 0x10.toByte(), //   REPORT_COUNT (16)
+            0x81.toByte(), 0x02.toByte(), //   INPUT (Data,Var,Abs)
 
             // Hat switch (D-Pad)
-            0x05.toByte(), 0x01.toByte(), //     USAGE_PAGE (Generic Desktop)
-            0x09.toByte(), 0x39.toByte(), //     USAGE (Hat switch)
-            0x15.toByte(), 0x01.toByte(), //     LOGICAL_MINIMUM (1)
-            0x25.toByte(), 0x08.toByte(), //     LOGICAL_MAXIMUM (8)
-            0x35.toByte(), 0x00.toByte(), //     PHYSICAL_MINIMUM (0)
-            0x45.toByte(), 0x07.toByte(), //     PHYSICAL_MAXIMUM (7)
-            0x65.toByte(), 0x14.toByte(), //     UNIT (Eng Rot:Angular Pos)
-            0x75.toByte(), 0x04.toByte(), //     REPORT_SIZE (4)
-            0x95.toByte(), 0x01.toByte(), //     REPORT_COUNT (1)
-            0x81.toByte(), 0x42.toByte(), //     INPUT (Data,Var,Abs,Null)
-            0x75.toByte(), 0x04.toByte(), //     REPORT_SIZE (4) - Padding 4 bits to round up to full byte
-            0x95.toByte(), 0x01.toByte(), //     REPORT_COUNT (1)
-            0x81.toByte(), 0x03.toByte(), //     INPUT (Cnst,Var,Abs)
+            0x05.toByte(), 0x01.toByte(), //   USAGE_PAGE (Generic Desktop)
+            0x09.toByte(), 0x39.toByte(), //   USAGE (Hat switch)
+            0x15.toByte(), 0x01.toByte(), //   LOGICAL_MINIMUM (1)
+            0x25.toByte(), 0x08.toByte(), //   LOGICAL_MAXIMUM (8)
+            0x75.toByte(), 0x04.toByte(), //   REPORT_SIZE (4)
+            0x95.toByte(), 0x01.toByte(), //   REPORT_COUNT (1)
+            0x81.toByte(), 0x42.toByte(), //   INPUT (Data,Var,Abs,Null)
+            // Padding 4 bits to round up to full byte
+            0x75.toByte(), 0x04.toByte(), //   REPORT_SIZE (4)
+            0x95.toByte(), 0x01.toByte(), //   REPORT_COUNT (1)
+            0x81.toByte(), 0x03.toByte(), //   INPUT (Cnst,Var,Abs)
 
-            // 4 Analog Axes: X, Y, Z, Rz (-127 to +127)
-            0x05.toByte(), 0x01.toByte(), //     USAGE_PAGE (Generic Desktop)
-            0x09.toByte(), 0x30.toByte(), //     USAGE (X) - Left Stick X
-            0x09.toByte(), 0x31.toByte(), //     USAGE (Y) - Left Stick Y
-            0x09.toByte(), 0x32.toByte(), //     USAGE (Z) - Right Stick X
-            0x09.toByte(), 0x35.toByte(), //     USAGE (Rz) - Right Stick Y
-            0x15.toByte(), 0x81.toByte(), //     LOGICAL_MINIMUM (-127)
-            0x25.toByte(), 0x7f.toByte(), //     LOGICAL_MAXIMUM (127)
-            0x75.toByte(), 0x08.toByte(), //     REPORT_SIZE (8)
-            0x95.toByte(), 0x04.toByte(), //     REPORT_COUNT (4)
-            0x81.toByte(), 0x02.toByte(), //     INPUT (Data,Var,Abs)
+            // 4 Analog Axes: X, Y, Z, Rz (0 to 255, center 128)
+            0x05.toByte(), 0x01.toByte(), //   USAGE_PAGE (Generic Desktop)
+            0x09.toByte(), 0x30.toByte(), //   USAGE (X) - Left Stick X
+            0x09.toByte(), 0x31.toByte(), //   USAGE (Y) - Left Stick Y
+            0x09.toByte(), 0x32.toByte(), //   USAGE (Z) - Right Stick X
+            0x09.toByte(), 0x35.toByte(), //   USAGE (Rz) - Right Stick Y
+            0x15.toByte(), 0x00.toByte(), //   LOGICAL_MINIMUM (0)
+            0x26.toByte(), 0xFF.toByte(), 0x00.toByte(), // LOGICAL_MAXIMUM (255)
+            0x75.toByte(), 0x08.toByte(), //   REPORT_SIZE (8)
+            0x95.toByte(), 0x04.toByte(), //   REPORT_COUNT (4)
+            0x81.toByte(), 0x02.toByte(), //   INPUT (Data,Var,Abs)
 
-            0xc0.toByte(),                 //   END_COLLECTION
             0xc0.toByte()                  // END_COLLECTION
         )
     }
