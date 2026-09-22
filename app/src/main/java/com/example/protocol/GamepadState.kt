@@ -20,6 +20,25 @@ data class GamepadState(
 ) {
     fun isPressed(mask: Int): Boolean = (buttons and mask) != 0
 
+    val btnA: Boolean get() = isPressed(BTN_A)
+    val btnB: Boolean get() = isPressed(BTN_B)
+    val btnX: Boolean get() = isPressed(BTN_X)
+    val btnY: Boolean get() = isPressed(BTN_Y)
+    val dpadUp: Boolean get() = isPressed(BTN_DPAD_UP)
+    val dpadDown: Boolean get() = isPressed(BTN_DPAD_DOWN)
+    val dpadLeft: Boolean get() = isPressed(BTN_DPAD_LEFT)
+    val dpadRight: Boolean get() = isPressed(BTN_DPAD_RIGHT)
+    val btnL1: Boolean get() = isPressed(BTN_L1)
+    val btnR1: Boolean get() = isPressed(BTN_R1)
+    val btnL2: Boolean get() = isPressed(BTN_L2)
+    val btnR2: Boolean get() = isPressed(BTN_R2)
+    val btnL3: Boolean get() = isPressed(BTN_L3)
+    val btnR3: Boolean get() = isPressed(BTN_R3)
+    val btnSelect: Boolean get() = isPressed(BTN_SELECT)
+    val btnStart: Boolean get() = isPressed(BTN_START)
+    val btnHome: Boolean get() = isPressed(BTN_HOME)
+    val btnTurbo: Boolean get() = isPressed(BTN_TURBO)
+
     fun withButtonPressed(mask: Int, pressed: Boolean): GamepadState {
         val newButtons = if (pressed) (buttons or mask) else (buttons and mask.inv())
         return copy(buttons = newButtons)

@@ -87,6 +87,20 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice|dataSync" />
 
+        <!-- TV Gamepad InputMethodService for injecting KeyEvents into external TV games (PPSSPP, Beach Buggy Racing) -->
+        <service
+            android:name=".receiver.TvGamepadImeService"
+            android:label="@string/ime_name"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
     </application>
 
 </manifest>

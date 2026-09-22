@@ -7,6 +7,7 @@ import com.example.data.AppDatabase
 import com.example.data.ControllerProfileEntity
 import com.example.data.TvServerEntity
 import com.example.network.BluetoothControllerClient
+import com.example.network.BluetoothHidControllerClient
 import com.example.network.ConnectionState
 import com.example.network.DiscoveredTv
 import com.example.network.IControllerClient
@@ -75,6 +76,7 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
             ProtocolType.WEBSOCKET -> WebSocketControllerClient(viewModelScope)
             ProtocolType.UDP -> UdpControllerClient(viewModelScope)
             ProtocolType.BLUETOOTH -> BluetoothControllerClient(getApplication(), viewModelScope)
+            ProtocolType.BLUETOOTH_HID -> BluetoothHidControllerClient(getApplication(), viewModelScope)
         }
         activeClient = newClient
 

@@ -194,6 +194,21 @@ class TvReceiverServer private constructor(
         }
     }
 
+    private fun processIncomingGamepadState(state: GamepadState) {
+        _latestGamepadState.value = state
+        totalPacketsCounter++
+        packetsThisSec++
+
+        // Inject KeyEvents into external TV games (PPSSPP, Beach Buggy Racing, etc.)
+        try {
+            TvGamepadImeService.instance?.dispatchGamepadState(state)
+        } catch (_: Throwable) {}
+
+        try {
+            TvInputInjector.dispatchGamepadState(state)
+        } catch (_: Throwable) {}
+    }
+
     private suspend fun handleWebSocketClient(socket: Socket) = withContext(Dispatchers.IO) {
         val clientAddress = socket.remoteSocketAddress.toString()
         val clientId = "WS-${socket.port}"
@@ -255,9 +270,7 @@ class TvReceiverServer private constructor(
                 if (opcode == 0x2) {
                     val state = GamepadState.fromByteArray(payload)
                     if (state != null) {
-                        _latestGamepadState.value = state
-                        totalPacketsCounter++
-                        packetsThisSec++
+                        processIncomingGamepadState(state)
                     } else if (payload.isNotEmpty() && payload[0] == GamepadState.PING_PACKET && payload.size >= 11) {
                         val buffer = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
                         buffer.get() // magic
@@ -368,9 +381,7 @@ class TvReceiverServer private constructor(
                         if (length >= 21 && data[0] == GamepadState.MAGIC_PACKET) {
                             val state = GamepadState.fromByteArray(data.copyOf(length))
                             if (state != null) {
-                                _latestGamepadState.value = state
-                                totalPacketsCounter++
-                                packetsThisSec++
+                                processIncomingGamepadState(state)
                             }
                         } else if (length >= 11 && data[0] == GamepadState.PING_PACKET) {
                             val byteBuf = ByteBuffer.wrap(data, 0, length).order(ByteOrder.LITTLE_ENDIAN)
@@ -449,9 +460,7 @@ class TvReceiverServer private constructor(
                 if (bytesRead >= 21 && buffer[0] == GamepadState.MAGIC_PACKET) {
                     val state = GamepadState.fromByteArray(buffer.copyOf(bytesRead))
                     if (state != null) {
-                        _latestGamepadState.value = state
-                        totalPacketsCounter++
-                        packetsThisSec++
+                        processIncomingGamepadState(state)
                     }
                 } else if (bytesRead >= 11 && buffer[0] == GamepadState.PING_PACKET) {
                     val byteBuf = ByteBuffer.wrap(buffer, 0, bytesRead).order(ByteOrder.LITTLE_ENDIAN)
@@ -596,6 +605,10 @@ class TvReceiverServer private constructor(
         udpSocket = null
         btServerSocket = null
         multicastLock = null
+
+        try {
+            TvGamepadImeService.instance?.releaseAllKeys()
+        } catch (_: Throwable) {}
 
         _connectedClients.value = emptyList()
         _stats.value = _stats.value.copy(

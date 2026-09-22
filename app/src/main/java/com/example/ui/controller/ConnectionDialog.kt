@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -29,13 +31,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
@@ -70,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.TvServerEntity
 import com.example.network.ConnectionState
 import com.example.network.DiscoveredTv
@@ -123,7 +129,7 @@ fun ConnectionDialog(
     }
 
     LaunchedEffect(selectedProtocol) {
-        if (selectedProtocol == ProtocolType.BLUETOOTH) {
+        if (selectedProtocol == ProtocolType.BLUETOOTH || selectedProtocol == ProtocolType.BLUETOOTH_HID) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val granted = androidx.core.content.ContextCompat.checkSelfPermission(
                     context,
@@ -161,11 +167,14 @@ fun ConnectionDialog(
         label = "radar_rot"
     )
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.96f)
-                .heightIn(max = 540.dp)
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.92f)
                 .testTag("connection_dialog"),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = CyberDarkNavy),
@@ -173,8 +182,9 @@ fun ConnectionDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(14.dp)
             ) {
                 // Header
                 Row(
@@ -310,18 +320,19 @@ fun ConnectionDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) NeonCyan else Color.Transparent)
+                                .background(if (isSelected) (if (proto == ProtocolType.BLUETOOTH_HID) XboxGreen else NeonCyan) else Color.Transparent)
                                 .clickable { selectedProtocol = proto }
                                 .padding(vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = when (proto) {
-                                    ProtocolType.WEBSOCKET -> "WebSocket"
+                                    ProtocolType.WEBSOCKET -> "Wi-Fi WS"
                                     ProtocolType.UDP -> "UDP Fast"
-                                    ProtocolType.BLUETOOTH -> "Bluetooth"
+                                    ProtocolType.BLUETOOTH -> "BT App"
+                                    ProtocolType.BLUETOOTH_HID -> "BT HID"
                                 },
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) CyberBlack else TextSecondary
                             )
@@ -331,8 +342,38 @@ fun ConnectionDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Content for Bluetooth Tab vs Wi-Fi Tab
-                if (selectedProtocol == ProtocolType.BLUETOOTH) {
+                // Content for Bluetooth Tabs vs Wi-Fi Tabs
+                if (selectedProtocol == ProtocolType.BLUETOOTH || selectedProtocol == ProtocolType.BLUETOOTH_HID) {
+                    // Explanatory banner for Bluetooth HID mode
+                    if (selectedProtocol == ProtocolType.BLUETOOTH_HID) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(XboxGreen.copy(alpha = 0.15f))
+                                .border(1.dp, XboxGreen.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Gamepad, contentDescription = "Native HID", tint = XboxGreen, modifier = Modifier.size(16.dp))
+                            Column {
+                                Text(
+                                    text = "Native Hardware Gamepad Profile",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = XboxGreen
+                                )
+                                Text(
+                                    text = "Emulates an official gamepad. Detected automatically in Beach Buggy Racing & PPSSPP!",
+                                    fontSize = 9.sp,
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+
                     // BLUETOOTH VIEW
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -343,7 +384,7 @@ fun ConnectionDialog(
                             text = "PAIRED BLUETOOTH DEVICES (${pairedDevices.size})",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = NeonCyan,
+                            color = if (selectedProtocol == ProtocolType.BLUETOOTH_HID) XboxGreen else NeonCyan,
                             letterSpacing = 1.sp
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -388,42 +429,48 @@ fun ConnectionDialog(
                     }
 
                     if (pairedDevices.isNotEmpty()) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f, fill = false)
-                                .heightIn(max = 140.dp),
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(pairedDevices) { (name, addr) ->
+                            pairedDevices.forEach { (name, addr) ->
+                                val isHid = selectedProtocol == ProtocolType.BLUETOOTH_HID
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(CyberCardBg)
-                                        .border(1.dp, CyberCardBorder, RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (isHid) XboxGreen.copy(alpha = 0.3f) else CyberCardBorder, RoundedCornerShape(8.dp))
                                         .clickable {
-                                            onConnect(addr, 0, ProtocolType.BLUETOOTH, false)
+                                            onConnect(addr, 0, selectedProtocol, false)
                                         }
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Icon(Icons.Default.Bluetooth, contentDescription = "BT", tint = NeonCyan, modifier = Modifier.size(18.dp))
+                                        Icon(
+                                            if (isHid) Icons.Default.Gamepad else Icons.Default.Bluetooth,
+                                            contentDescription = "BT",
+                                            tint = if (isHid) XboxGreen else NeonCyan,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                         Column {
                                             Text(text = name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                             Text(text = addr, fontSize = 10.sp, color = TextMuted)
                                         }
                                     }
                                     Button(
-                                        onClick = { onConnect(addr, 0, ProtocolType.BLUETOOTH, false) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = CyberBlack),
+                                        onClick = { onConnect(addr, 0, selectedProtocol, false) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isHid) XboxGreen else NeonCyan,
+                                            contentColor = CyberBlack
+                                        ),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                                         modifier = Modifier.height(28.dp)
                                     ) {
-                                        Text("Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(if (isHid) "Connect HID" else "Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -482,14 +529,11 @@ fun ConnectionDialog(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     if (discoveredTvs.isNotEmpty()) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f, fill = false)
-                                .heightIn(max = 140.dp),
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(discoveredTvs) { tv ->
+                            discoveredTvs.forEach { tv ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -564,51 +608,36 @@ fun ConnectionDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                // Manual Entry (Only for Wi-Fi and Bluetooth App modes)
+                if (selectedProtocol != ProtocolType.BLUETOOTH_HID) {
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                // Manual Entry Header
-                Text(
-                    text = if (selectedProtocol == ProtocolType.BLUETOOTH) "MANUAL BLUETOOTH MAC / NAME" else "MANUAL TV IP ADDRESS",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextSecondary,
-                    letterSpacing = 1.sp
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = manualIp,
-                        onValueChange = { manualIp = it },
-                        placeholder = {
-                            Text(
-                                text = if (selectedProtocol == ProtocolType.BLUETOOTH) "e.g. Living Room TV or MAC" else "e.g. 192.168.1.150",
-                                fontSize = 11.sp,
-                                color = TextMuted
-                            )
-                        },
-                        modifier = Modifier.weight(1f).testTag("manual_ip_input"),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = CyberCardBorder,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedContainerColor = CyberCardBg,
-                            unfocusedContainerColor = CyberCardBg
-                        )
+                    Text(
+                        text = if (selectedProtocol == ProtocolType.BLUETOOTH) "MANUAL BLUETOOTH MAC / NAME" else "MANUAL TV IP ADDRESS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary,
+                        letterSpacing = 1.sp
                     )
 
-                    if (selectedProtocol != ProtocolType.BLUETOOTH) {
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
-                            value = manualPort,
-                            onValueChange = { manualPort = it },
-                            modifier = Modifier.width(68.dp).testTag("manual_port_input"),
+                            value = manualIp,
+                            onValueChange = { manualIp = it },
+                            placeholder = {
+                                Text(
+                                    text = if (selectedProtocol == ProtocolType.BLUETOOTH) "e.g. Living Room TV or MAC" else "e.g. 192.168.1.150",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            },
+                            modifier = Modifier.weight(1f).testTag("manual_ip_input"),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonCyan,
@@ -619,25 +648,42 @@ fun ConnectionDialog(
                                 unfocusedContainerColor = CyberCardBg
                             )
                         )
-                    }
 
-                    Button(
-                        onClick = {
-                            if (manualIp.isNotBlank()) {
-                                val port = manualPort.toIntOrNull() ?: if (selectedProtocol == ProtocolType.UDP) 8766 else 8765
-                                onConnect(manualIp.trim(), port, selectedProtocol, true)
-                            }
-                        },
-                        enabled = manualIp.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ElectricViolet,
-                            contentColor = TextPrimary,
-                            disabledContainerColor = CyberCardBg
-                        ),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.height(48.dp).testTag("manual_connect_button")
-                    ) {
-                        Text("Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        if (selectedProtocol != ProtocolType.BLUETOOTH) {
+                            OutlinedTextField(
+                                value = manualPort,
+                                onValueChange = { manualPort = it },
+                                modifier = Modifier.width(68.dp).testTag("manual_port_input"),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = CyberCardBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    focusedContainerColor = CyberCardBg,
+                                    unfocusedContainerColor = CyberCardBg
+                                )
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                if (manualIp.isNotBlank()) {
+                                    val port = manualPort.toIntOrNull() ?: if (selectedProtocol == ProtocolType.UDP) 8766 else 8765
+                                    onConnect(manualIp.trim(), port, selectedProtocol, true)
+                                }
+                            },
+                            enabled = manualIp.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ElectricViolet,
+                                contentColor = TextPrimary,
+                                disabledContainerColor = CyberCardBg
+                            ),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(48.dp).testTag("manual_connect_button")
+                        ) {
+                            Text("Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

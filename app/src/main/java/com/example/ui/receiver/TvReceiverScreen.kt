@@ -1,6 +1,7 @@
 package com.example.ui.receiver
 
 import android.content.Intent
+import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -18,15 +19,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -37,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,9 +64,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.MainActivity
 import com.example.protocol.GamepadState
+import com.example.receiver.GamepadKeyMapping
 import com.example.receiver.ReceiverServerStats
+import com.example.receiver.TvGamepadImeService
 import com.example.receiver.TvReceiverServer
 import com.example.receiver.TvReceiverService
+import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.ButtonBorder
 import com.example.ui.theme.CyberBlack
 import com.example.ui.theme.CyberCardBg
@@ -122,14 +133,24 @@ fun TvReceiverScreen(
                     .background(CyberDarkNavy)
                     .border(1.dp, CyberCardBorder, RoundedCornerShape(12.dp))
             ) {
-                if (selectedTab == 0) {
-                    GamepadVisualizerHud(
+                when (selectedTab) {
+                    0 -> GamepadVisualizerHud(
                         state = state,
                         stats = stats,
                         connectedClientsCount = clients.size
                     )
-                } else {
-                    SpaceshipTestGame(
+                    1 -> TvGamesSetupPanel(
+                        state = state,
+                        onMinimizeToBackground = {
+                            try {
+                                TvReceiverService.start(context)
+                            } catch (_: Throwable) {}
+                            try {
+                                (context as? android.app.Activity)?.moveTaskToBack(true)
+                            } catch (_: Throwable) {}
+                        }
+                    )
+                    else -> SpaceshipTestGame(
                         gamepadState = state
                     )
                 }
@@ -220,7 +241,11 @@ private fun TvTopHeader(
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            listOf("Live Gamepad HUD" to Icons.Default.Visibility, "Flight Latency Test" to Icons.Default.RocketLaunch).forEachIndexed { index, (title, icon) ->
+            listOf(
+                "Live Gamepad HUD" to Icons.Default.Visibility,
+                "TV Games Setup (PPSSPP/Racing)" to Icons.Default.Gamepad,
+                "Flight Latency Test" to Icons.Default.RocketLaunch
+            ).forEachIndexed { index, (title, icon) ->
                 val isSelected = selectedTab == index
                 Box(
                     modifier = Modifier
@@ -499,6 +524,297 @@ private fun TvBottomStatusBar(
             Icon(Icons.Default.PlayArrow, contentDescription = "Background", modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(6.dp))
             Text("Send to Background & Launch Games", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun TvGamesSetupPanel(
+    state: GamepadState,
+    onMinimizeToBackground: () -> Unit
+) {
+    val context = LocalContext.current
+    var isImeEnabled by remember { mutableStateOf(TvGamepadImeService.isImeEnabled(context)) }
+    val isImeActive by TvGamepadImeService.isImeActive.collectAsState()
+    var selectedMapping by remember { mutableStateOf(TvGamepadImeService.currentMapping) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Left Column: IME Status & Quick Controls
+        Card(
+            modifier = Modifier
+                .width(320.dp)
+                .fillMaxHeight(),
+            colors = CardDefaults.cardColors(containerColor = CyberCardBg),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CyberCardBorder)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "VIRTUAL GAMEPAD KEYBOARD",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NeonCyan,
+                        letterSpacing = 1.sp
+                    )
+
+                    // IME Status Badge
+                    val imeStatusOk = isImeEnabled
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (imeStatusOk) XboxGreen.copy(alpha = 0.15f) else AmberWarning.copy(alpha = 0.15f))
+                            .border(1.dp, if (imeStatusOk) XboxGreen.copy(alpha = 0.5f) else AmberWarning.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                if (imeStatusOk) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                contentDescription = "Status",
+                                tint = if (imeStatusOk) XboxGreen else AmberWarning,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = if (imeStatusOk) "Input Method: ENABLED" else "Input Method: NOT ENABLED",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (imeStatusOk) XboxGreen else AmberWarning
+                            )
+                        }
+                        Text(
+                            text = if (imeStatusOk)
+                                "Virtual Gamepad Input is active. Gamepad key events are injected directly into active games like PPSSPP and Beach Buggy Racing."
+                            else
+                                "Android security requires enabling 'Virtual Gamepad Input' in Android TV Settings once so it can dispatch keystrokes into games.",
+                            fontSize = 10.sp,
+                            color = TextPrimary
+                        )
+
+                        Button(
+                            onClick = {
+                                try {
+                                    context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    })
+                                } catch (_: Throwable) {
+                                    try {
+                                        context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        })
+                                    } catch (_: Throwable) {}
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (imeStatusOk) CyberCardBorder else AmberWarning,
+                                contentColor = if (imeStatusOk) TextPrimary else CyberBlack
+                            ),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth().height(32.dp)
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Open TV Keyboard Settings", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Key Mapping Mode Selector
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "KEY EVENT INJECTION MODE",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            letterSpacing = 1.sp
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(CyberDarkNavy)
+                                .padding(2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            val modes = listOf(
+                                GamepadKeyMapping.UNIVERSAL_GAMES to "Beach Buggy & All Games",
+                                GamepadKeyMapping.GAMEPAD_BUTTONS to "Gamepad (A/B/X/Y)",
+                                GamepadKeyMapping.KEYBOARD_KEYS to "Keyboard (Enter/Esc)"
+                            )
+                            modes.forEach { (mode, label) ->
+                                val selected = selectedMapping == mode
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (selected) NeonCyan else Color.Transparent)
+                                        .clickable {
+                                            selectedMapping = mode
+                                            TvGamepadImeService.currentMapping = mode
+                                        }
+                                        .padding(vertical = 5.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 9.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) CyberBlack else TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Real-time button activity preview
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "LIVE CONTROLLER INPUT STREAM",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            letterSpacing = 1.sp
+                        )
+                        val pressedButtons = mutableListOf<String>()
+                        if (state.btnA) pressedButtons.add("A")
+                        if (state.btnB) pressedButtons.add("B")
+                        if (state.btnX) pressedButtons.add("X")
+                        if (state.btnY) pressedButtons.add("Y")
+                        if (state.dpadUp) pressedButtons.add("UP")
+                        if (state.dpadDown) pressedButtons.add("DOWN")
+                        if (state.dpadLeft) pressedButtons.add("LEFT")
+                        if (state.dpadRight) pressedButtons.add("RIGHT")
+                        if (state.btnL1) pressedButtons.add("L1")
+                        if (state.btnR1) pressedButtons.add("R1")
+                        if (state.btnL2 || state.l2Trigger > 0.4f) pressedButtons.add("L2")
+                        if (state.btnR2 || state.r2Trigger > 0.4f) pressedButtons.add("R2")
+                        if (state.btnStart) pressedButtons.add("START")
+                        if (state.btnSelect) pressedButtons.add("SELECT")
+
+                        Text(
+                            text = if (pressedButtons.isEmpty()) "Waiting for button press..." else "Held: [ ${pressedButtons.joinToString(", ")} ]",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (pressedButtons.isEmpty()) TextMuted else NeonCyan
+                        )
+                        Text(
+                            text = "Stick: (X: ${String.format("%.2f", state.leftStickX)}, Y: ${String.format("%.2f", state.leftStickY)})",
+                            fontSize = 10.sp,
+                            color = TextMuted
+                        )
+                    }
+                }
+
+                // Launch into background
+                Button(
+                    onClick = onMinimizeToBackground,
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = CyberBlack),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Minimize & Play TV Games Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Right Column: Step-by-Step Game Guides
+        Card(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            colors = CardDefaults.cardColors(containerColor = CyberCardBg),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CyberCardBorder)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "HOW TO USE WITH PPSSPP & BEACH BUGGY RACING",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = NeonCyan,
+                    letterSpacing = 1.sp
+                )
+
+                // Option 1: Native Bluetooth HID Gamepad
+                GameGuideCard(
+                    title = "Option 1: Native Bluetooth HID Gamepad (Recommended for Beach Buggy)",
+                    color = XboxGreen,
+                    description = "Your phone acts directly as a physical Xbox/PlayStation Bluetooth gamepad. Beach Buggy Racing and PPSSPP recognize full analog steering with zero setup!",
+                    steps = listOf(
+                        "1. On your phone, tap the connection button and select the 'BT HID' tab.",
+                        "2. Pair your phone with your TV in Android TV Settings -> Remotes & Accessories.",
+                        "3. Tap 'Connect HID' on the phone. Games will instantly detect native analog joystick and button events."
+                    )
+                )
+
+                // Option 2: Virtual Gamepad Keyboard Service
+                GameGuideCard(
+                    title = "Option 2: TV Virtual Gamepad Keyboard (Works over Wi-Fi & Bluetooth)",
+                    color = ElectricViolet,
+                    description = "Uses the background service running on this TV to inject KeyEvents into any game.",
+                    steps = listOf(
+                        "1. Tap 'Open TV Keyboard Settings' on the left and toggle 'Virtual Gamepad Input' to ON.",
+                        "2. Connect your phone via Wi-Fi (WebSocket / UDP) or Bluetooth App mode.",
+                        "3. Tap 'Minimize & Play TV Games Now' to send this app to background.",
+                        "4. Open Beach Buggy Racing or PPSSPP to start playing!"
+                    )
+                )
+
+                // PPSSPP Mapping Guide
+                GameGuideCard(
+                    title = "PPSSPP Button Mapping Guide",
+                    color = NeonCyan,
+                    description = "How to map buttons inside the PPSSPP emulator:",
+                    steps = listOf(
+                        "1. Open PPSSPP on your TV, go to Settings -> Controls -> Control Mapping.",
+                        "2. Click any action (Cross, Circle, Square, Triangle, D-Pad, Up/Down/Left/Right).",
+                        "3. Press the corresponding button on your mobile phone to bind it.",
+                        "4. Return to your game and enjoy lag-free emulation controls!"
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GameGuideCard(
+    title: String,
+    color: Color,
+    description: String,
+    steps: List<String>
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(CyberDarkNavy)
+            .border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(text = title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(text = description, fontSize = 11.sp, color = TextPrimary)
+        Spacer(modifier = Modifier.height(2.dp))
+        steps.forEach { step ->
+            Text(text = step, fontSize = 10.sp, color = TextSecondary)
         }
     }
 }

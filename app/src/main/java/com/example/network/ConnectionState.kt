@@ -19,7 +19,8 @@ sealed interface ConnectionState {
 enum class ProtocolType(val label: String) {
     WEBSOCKET("WebSocket (Wi-Fi)"),
     UDP("UDP Fast-Packet"),
-    BLUETOOTH("Bluetooth RFCOMM")
+    BLUETOOTH("Bluetooth (TV Receiver)"),
+    BLUETOOTH_HID("Bluetooth HID (Native Gamepad)")
 }
 
 data class LatencyStats(
