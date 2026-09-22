@@ -139,13 +139,18 @@ fun TvReceiverScreen(
             TvBottomStatusBar(
                 stats = stats,
                 onMinimizeToBackground = {
-                    TvReceiverService.start(context)
-                    // Move task to back so user can play their TV games while receiver runs in background!
-                    val intent = Intent(Intent.ACTION_MAIN).apply {
-                        addCategory(Intent.CATEGORY_HOME)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    try {
+                        TvReceiverService.start(context)
+                    } catch (_: Throwable) {}
+                    try {
+                        (context as? android.app.Activity)?.moveTaskToBack(true)
+                    } catch (_: Throwable) {
+                        val intent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(intent)
                     }
-                    context.startActivity(intent)
                 }
             )
         }
@@ -200,7 +205,7 @@ private fun TvTopHeader(
                     }
                 }
                 Text(
-                    text = "WebSocket: ws://${stats.localIp}:${stats.wsPort} • UDP: ${stats.udpPort} • BT: ${stats.btName}",
+                    text = "WebSocket: ws://${stats.localIp}:${stats.wsPort} • UDP: ${stats.udpPort} • BT: ${if (stats.btEnabled && stats.btName.isNotBlank()) stats.btName else if (stats.btEnabled) "Active" else "Off"}",
                     fontSize = 11.sp,
                     color = NeonCyan
                 )

@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.R
 import kotlinx.coroutines.CoroutineScope
@@ -27,13 +28,15 @@ class TvReceiverService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        server = TvReceiverServer.getInstance(applicationContext, serviceScope)
+        server = TvReceiverServer.getInstance(applicationContext)
 
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TvReceiverService::WakeLock").apply {
-            setReferenceCounted(false)
-            acquire(24 * 60 * 60 * 1000L) // 24 hours max
-        }
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TvReceiverService::WakeLock").apply {
+                setReferenceCounted(false)
+                acquire(24 * 60 * 60 * 1000L) // 24 hours max
+            }
+        } catch (_: Throwable) {}
 
         createNotificationChannel()
     }
@@ -47,15 +50,29 @@ class TvReceiverService : Service() {
             }
             else -> {
                 val notification = buildNotification("Listening on ws://${server.getLocalIpAddress()}:8765")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val hasBt = server.hasBluetoothPermission()
+                        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            if (hasBt) {
+                                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                            } else {
+                                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                            }
+                        } else {
+                            if (hasBt) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
+                        }
+
+                        if (type != 0) {
+                            startForeground(NOTIFICATION_ID, notification, type)
+                        } else {
+                            startForeground(NOTIFICATION_ID, notification)
+                        }
                     } else {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                        startForeground(NOTIFICATION_ID, notification)
                     }
-                    startForeground(NOTIFICATION_ID, notification, type)
-                } else {
-                    startForeground(NOTIFICATION_ID, notification)
+                } catch (t: Throwable) {
+                    Log.w("TvReceiverService", "startForeground fallback", t)
                 }
 
                 server.startServer()

@@ -58,22 +58,29 @@ class BluetoothControllerClient(
         _connectionState.value = ConnectionState.Connecting("Connecting Bluetooth to $target...")
 
         try {
-            // Find device by MAC address or paired name
-            val paired = adapter.bondedDevices ?: emptySet()
+            val paired = try {
+                adapter.bondedDevices ?: emptySet()
+            } catch (se: SecurityException) {
+                _connectionState.value = ConnectionState.Failed("Bluetooth permission (Nearby Devices) required")
+                return@withContext false
+            }
+
             val device: BluetoothDevice? = paired.firstOrNull {
                 it.address.equals(target, ignoreCase = true) || it.name?.equals(target, ignoreCase = true) == true
             } ?: try {
                 adapter.getRemoteDevice(target)
-            } catch (_: Exception) {
+            } catch (_: Throwable) {
                 null
             }
 
             if (device == null) {
-                _connectionState.value = ConnectionState.Failed("Device $target not found in paired devices")
+                _connectionState.value = ConnectionState.Failed("Device '$target' not found in paired Bluetooth devices. Please pair TV in Android Bluetooth Settings first.")
                 return@withContext false
             }
 
-            adapter.cancelDiscovery()
+            try {
+                adapter.cancelDiscovery()
+            } catch (_: Throwable) {}
 
             val btSocket = device.createRfcommSocketToServiceRecord(BT_GAMEPAD_UUID)
             btSocket.connect()
@@ -81,14 +88,20 @@ class BluetoothControllerClient(
             outputStream = btSocket.outputStream
             inputStream = btSocket.inputStream
 
+            val deviceName = try { device.name ?: target } catch (_: Throwable) { target }
+            val deviceAddr = try { device.address ?: "" } catch (_: Throwable) { "" }
+
             _connectionState.value = ConnectionState.Connected(
-                targetName = device.name ?: "TV (BT)",
-                endpoint = device.address,
+                targetName = deviceName,
+                endpoint = deviceAddr,
                 protocol = ProtocolType.BLUETOOTH
             )
 
             startListenerAndPing()
             true
+        } catch (se: SecurityException) {
+            _connectionState.value = ConnectionState.Failed("Bluetooth permission (Nearby Devices) required")
+            false
         } catch (e: Exception) {
             _connectionState.value = ConnectionState.Failed(e.message ?: "Bluetooth connection failed")
             false
@@ -217,5 +230,32 @@ class BluetoothControllerClient(
 
     companion object {
         val BT_GAMEPAD_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+        fun hasBluetoothPermission(context: Context): Boolean {
+            return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.BLUETOOTH_CONNECT
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        }
+
+        fun getBondedDevices(context: Context): List<Pair<String, String>> {
+            return try {
+                if (!hasBluetoothPermission(context)) return emptyList()
+                val adapter = BluetoothAdapter.getDefaultAdapter() ?: return emptyList()
+                if (!adapter.isEnabled) return emptyList()
+                val set = adapter.bondedDevices ?: emptySet()
+                set.map { dev ->
+                    val name = try { dev.name?.takeIf { it.isNotBlank() } ?: "Unknown TV" } catch (_: Throwable) { "Unknown TV" }
+                    val addr = try { dev.address ?: "" } catch (_: Throwable) { "" }
+                    name to addr
+                }.filter { it.second.isNotBlank() }
+            } catch (_: Throwable) {
+                emptyList()
+            }
+        }
     }
 }

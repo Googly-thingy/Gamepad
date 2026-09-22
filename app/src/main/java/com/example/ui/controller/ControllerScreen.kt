@@ -302,10 +302,13 @@ fun ControllerScreen(
                 discoveredTvsState = viewModel.discoveredTvs,
                 savedServers = savedServers,
                 currentProtocol = ProtocolType.WEBSOCKET,
+                connectionState = connectionState,
+                phoneIp = viewModel.getPhoneIpAddress(),
+                onRefreshDiscovery = { viewModel.refreshDiscovery() },
+                onGetBondedDevices = { viewModel.getBondedBluetoothDevices() },
                 onDismiss = { showConnectionDialog = false },
                 onConnect = { target, port, protocol, saveToHistory ->
                     viewModel.connect(target, port, protocol, saveToHistory)
-                    showConnectionDialog = false
                 }
             )
         }

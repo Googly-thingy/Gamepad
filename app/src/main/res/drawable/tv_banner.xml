@@ -1,0 +1,74 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Background Canvas -->
+    <path
+        android:fillColor="#0A0D14"
+        android:pathData="M0,0h320v180h-320z" />
+
+    <!-- Neon Accent Glow Lines -->
+    <path
+        android:fillColor="#00F5D4"
+        android:pathData="M0,0 L320,0 L320,4 L0,4 Z" />
+    <path
+        android:fillColor="#7B2CBF"
+        android:pathData="M0,176 L320,176 L320,180 L0,180 Z" />
+
+    <!-- TV Frame Icon -->
+    <path
+        android:fillColor="#1B2236"
+        android:strokeColor="#00F5D4"
+        android:strokeWidth="2.5"
+        android:pathData="M70,35 h180 c8,0 15,7 15,15 v75 c0,8 -7,15 -15,15 h-180 c-8,0 -15,-7 -15,-15 v-75 c0,-8 7,-15 15,-15 z" />
+
+    <!-- TV Stand -->
+    <path
+        android:fillColor="#00F5D4"
+        android:pathData="M145,140 h30 v12 h-30 z M130,152 h60 v4 h-60 z" />
+
+    <!-- Inner Screen Display -->
+    <path
+        android:fillColor="#0E121E"
+        android:pathData="M78,43 h164 v65 h-164 z" />
+
+    <!-- Gamepad inside TV Screen -->
+    <!-- Gamepad Body -->
+    <path
+        android:fillColor="#222B45"
+        android:strokeColor="#7B2CBF"
+        android:strokeWidth="1.5"
+        android:pathData="M130,62 h60 c10,0 18,8 18,18 v6 c0,8 -6,14 -14,14 c-6,0 -10,-4 -12,-8 h-40 c-2,4 -6,8 -12,8 c-8,0 -14,-6 -14,-14 v-6 c0,-10 8,-18 14,-18 z" />
+
+    <!-- D-Pad Plus inside Screen -->
+    <path
+        android:fillColor="#00F5D4"
+        android:pathData="M136,71 h4 v8 h-4 z M134,73 h8 v4 h-8 z" />
+
+    <!-- ABXY Buttons inside Screen -->
+    <path
+        android:fillColor="#FF007F"
+        android:pathData="M184,72 a2,2 0 1,0 0.01,0 Z" />
+    <path
+        android:fillColor="#00F5D4"
+        android:pathData="M180,76 a2,2 0 1,0 0.01,0 Z" />
+    <path
+        android:fillColor="#107C10"
+        android:pathData="M184,80 a2,2 0 1,0 0.01,0 Z" />
+    <path
+        android:fillColor="#FFB703"
+        android:pathData="M188,76 a2,2 0 1,0 0.01,0 Z" />
+
+    <!-- Wi-Fi / Low Latency Radio Waves -->
+    <path
+        android:strokeColor="#00F5D4"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M152,50 a12,12 0 0,1 16,0" />
+    <path
+        android:strokeColor="#00F5D4"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M147,46 a20,20 0 0,1 26,0" />
+</vector>

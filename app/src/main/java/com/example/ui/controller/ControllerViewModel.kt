@@ -173,6 +173,20 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun getPhoneIpAddress(): String = discoveryClient.getPhoneIpAddress()
+
+    fun refreshDiscovery() {
+        discoveryClient.sendDiscoveryPing()
+    }
+
+    fun getBondedBluetoothDevices(): List<Pair<String, String>> {
+        return BluetoothControllerClient.getBondedDevices(getApplication())
+    }
+
+    fun hasBluetoothPermission(): Boolean {
+        return BluetoothControllerClient.hasBluetoothPermission(getApplication())
+    }
+
     override fun onCleared() {
         super.onCleared()
         discoveryClient.stopDiscovery()
