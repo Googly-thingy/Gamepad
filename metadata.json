@@ -1,0 +1,6 @@
+{
+  "name": "Game Controller",
+  "description": "Low-latency virtual gaming controller and background TV receiver suite via WebSockets and Bluetooth.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
